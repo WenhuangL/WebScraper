@@ -6,10 +6,10 @@ import time
 
 def scrape_msn_money():
     base_url = "https://finance.yahoo.com/markets/stocks"
-    sort_condition = "gainers"
+    sort_condition = "losers"
 
     cats = [
-        "Ticker", "Sector", "Industry",
+        "Ticker", "Sector",
         "Current Price", "1D Change",
         "5D Change", "1M Change", "6M Change",
         "1Y Change", "5Y Change", "All Change"
@@ -30,29 +30,37 @@ def scrape_msn_money():
     def scrape_stock_details(stock_url):
         response = requests.get(stock_url, headers=headers)
 
-        soup = BeautifulSoup(response.text, 'html.parser')
+        soup = BeautifulSoup(response.text, "html.parser")
 
         #print(soup.prettify()[:1000])
 
-        stock_name = soup.find('h1', class_='yf-4vbjci')
+        stock_name = soup.find("h1", class_="yf-4vbjci")
         stock_name = stock_name.text.strip() if stock_name else "N/A"
 
-        #sector = soup.find_all('a', class_='subtle-link fin-size-medium ellipsis yf-1i440lo')
-        sector = soup.find('span', class_='titleInfo yf-1d08kze')
+        #sector = soup.find_all("a", class_="subtle-link fin-size-medium ellipsis yf-1i440lo")
+        sector = soup.find("span", class_="titleInfo yf-1d08kze")
         sector = sector.text.strip() if sector else "N/A"
-        print(sector)
+        #print(sector)
 
         #industry = sector[1].text.strip()
         #sector = sector[0].text.strip() if sector else "N/A"
 
-        price = soup.find_all('span', class_='yf-ipw1h0 base')
-        price = price[2].text.strip() if price else "N/A"
+        price = soup.find_all("span", class_="yf-ipw1h0 base")
+        price = price[0].text.strip() if price else "N/A"
 
         # Gets the percent change in price over different periods
-        odc = soup.find_all('span', class_='txt-positive yf-ipw1h0 base')
-        odc = odc[1].text.strip() if odc else "N/A"
+        if sort_condition == "losers":
+            #odc = soup.find_all("span", class_="txt-negative yf-ipw1h0 base")
+            odc = soup.find_all("span", class_="txt-negative change yf-1c9i0iv")
+        elif sort_condition == "gainers":
+            odc = soup.find_all("span", class_="txt-positive yf-ipw1h0 base")
+        else:
+            print("unknown sort condition")
+            return 0
+        odc = odc[0].text.strip() if odc else "N/A"
+        #print(odc)
 
-        details = soup.find_all('h3', class_='title yf-17ug8v2')
+        details = soup.find_all("h3", class_="title yf-17ug8v2")
 
         fdc = details[0].text.strip() if len(details) > 0 else "N/A"
         omc = details[1].text.strip() if len(details) > 1 else "N/A"
@@ -66,39 +74,12 @@ def scrape_msn_money():
             smc, oyc, fyc, atc
         ]
 
-    """
-    def scrape_stock_list(page_url):
-        response = requests.get(page_url)
-        soup = BeautifulSoup(response.text, 'html.parser')
-
-        dataset_list = soup.find_all(
-            'span', class_='quoteView-DS-EntryPoint1-2 hoverIcon ')
-        
-        soup = BeautifulSoup(response.text, 'html.parser')
-
-
-        dataset_list = soup.find_all(
-            'a', class_='link-hover link text-xl font-semibold')
-
-
-        if not dataset_list:
-            print("No dataset links found")
-            return
-
-
-        for dataset in dataset_list:
-            dataset_link = "https://archive.ics.uci.edu" + dataset['href']
-            print(f"Scraping details for {dataset.text.strip()}...")
-            dataset_details = scrape_dataset_details(dataset_link)
-            data.append(dataset_details)"""
-
-
     # Loop through the top stocks based on the sort_condition
     def scrape_stock_list(page_url):
         response = requests.get(page_url, headers=headers)
-        soup = BeautifulSoup(response.text, 'html.parser')
+        soup = BeautifulSoup(response.text, "html.parser")
         #print(soup.prettify()[:1000])
-        id_list = soup.find_all('a', class_='ticker medium [&_.symbol]:tw-text-md hover noPadding yf-90gdtp')
+        id_list = soup.find_all("a", class_="ticker medium [&_.symbol]:tw-text-md hover noPadding yf-90gdtp")
 
 
         if not id_list:
@@ -108,9 +89,11 @@ def scrape_msn_money():
         # print(id_list)
 
         for dataset in id_list:
-            stock_link = f"https://finance.yahoo.com" + dataset['href']
+            stock_link = f"https://finance.yahoo.com" + dataset["href"]
             print(f"Scraping details for {dataset.text.strip()}...")
             dataset_details = scrape_stock_details(stock_link)
+            if dataset_details[0] == "N/A":
+                continue
             data.append(dataset_details)
             time.sleep(1)
 
@@ -122,13 +105,13 @@ def scrape_msn_money():
     #initial_data_count = len(data)
     scrape_stock_list(page_url)
 
-    with open('msn_data.csv', 'w', newline='', encoding='utf-8') as file:
+    with open("yahoofin_data.csv", "w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file)
-        writer.writerow(headers)
+        writer.writerow(cats)
         writer.writerows(data)
 
     print("Scraping complete. Data saved to 'yahoofin_data.csv'.")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     scrape_msn_money()
