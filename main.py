@@ -1,5 +1,14 @@
+import math
 import requests
 from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+import yfinance as yf
+# from pprint import pprint
 import csv
 import time
 
@@ -109,8 +118,83 @@ def scrape_msn_money():
         writer = csv.writer(file)
         writer.writerow(cats)
         writer.writerows(data)
+def scrape_msn_money_stocks():
+    try:
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service)
+    except ValueError:
+        print("WebDriverManager failed. Trying to run ChromeDriver from path.")
+        print("If this fails, download ChromeDriver and place it in your script's directory.")
+        driver = webdriver.Chrome()
+
+    wait = WebDriverWait(driver, 15)
 
     print("Scraping complete. Data saved to 'yahoofin_data.csv'.")
+    sort_condition = "Losers"
+    sort_condition_temp = input("What condition would you like to sort the data by?")
+
+    if sort_condition_temp.lower() == "losers" or sort_condition_temp.lower() == "gainers":  # can add another 'or' if they want full shabang data or just ticker name
+        sort_condition = sort_condition_temp.capitalize()
+    else:
+        print("Sort condition not recognized, defaulting to losers")
+
+    driver.get(f"https://int1.msn.com/en-us/money/markets?tab=Top{sort_condition}")  # Capital L Loser
+
+    time.sleep(3)
+
+    stock_list = driver.find_elements(By.CLASS_NAME, "quoteTitle-DS-EntryPoint1-4")
+    facts_list = ["Ticker", "Price", "Previous Close",
+                  "Average Volume", "Shares Outstanding", "EPS (TTM)",
+                  "P/E (TTM)", "Fwd Dividend (% Yield)", "Ex-Dividend Date"]
+    facts_val_list = []
+
+    count = math.inf
+    while count > len(stock_list):
+        count = int(input(f"How many stocks would you like to scrape? Max is {len(stock_list)}"))
+        if count > len(stock_list):
+            print("Input exceeds maximum. Please try again.")
+
+    #print(len(stock_list))
+    for stock in stock_list:
+        # Stop early
+        if stock_list.index(stock) == count:
+            break
+
+        # Accounts for bug where last list item isn't actually shown
+        if stock.text == stock_list[len(stock_list)-1].text:
+            break
+        stock.click()
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", stock)
+        time.sleep(1)
+        symbol = driver.find_element(By.CLASS_NAME, "symbolWithBtn-DS-EntryPoint1-1").text
+        print(f"Scraping {stock.text}")
+        price = driver.find_element(By.CSS_SELECTOR, ".mainPrice").text
+
+        facts_elements = driver.find_elements(By.CLASS_NAME, "factsRowKey-DS-EntryPoint1-1")
+        facts_val_elements = driver.find_elements(By.CLASS_NAME, "factsRowValue-DS-EntryPoint1-1")
+
+        facts_val_list.append([symbol, price])
+
+        for n in range(len(facts_elements)):
+            facts_val_list[len(facts_val_list)-1].append(facts_val_elements[n].text)
+
+        #  For testing/displaying data
+        # print(f"- {symbol}: {price}")
+        # for n in range(len(facts_elements)):
+        #     if facts_val_elements[n].text != "-":
+        #         print(f"   {facts_elements[n].text}: {facts_val_elements[n].text}")
+        #for n in range(0, len(facts_list), 2):
+        #    print(f"    {facts_list[n].text}: {facts_list[n+1].text}")
+
+
+    driver.quit()
+
+    with open("msn_money_data.csv", "w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(facts_list)
+        writer.writerows(facts_val_list)
+
+    print("Scraping complete. Data saved to 'msn_money_data.csv'.")
 
 
 if __name__ == "__main__":
