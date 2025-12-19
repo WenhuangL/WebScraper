@@ -129,7 +129,6 @@ def scrape_msn_money_stocks():
 
     wait = WebDriverWait(driver, 15)
 
-    print("Scraping complete. Data saved to 'yahoofin_data.csv'.")
     sort_condition = "Losers"
     sort_condition_temp = input("What condition would you like to sort the data by?")
 
@@ -197,5 +196,57 @@ def scrape_msn_money_stocks():
     print("Scraping complete. Data saved to 'msn_money_data.csv'.")
 
 
+# Returns just a list of all the ticker names of the sort condition
+def scrape_msn_money_simple():
+    try:
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service)
+    except ValueError:
+        print("WebDriverManager failed. Trying to run ChromeDriver from path.")
+        print("If this fails, download ChromeDriver and place it in your script's directory.")
+        driver = webdriver.Chrome()
+
+    wait = WebDriverWait(driver, 15)
+
+    sort_condition = "Losers"
+    sort_condition_temp = input("What condition would you like to sort the data by?")
+
+    if sort_condition_temp.lower() == "losers" or sort_condition_temp.lower() == "gainers":  # can add another 'or' if they want full shabang data or just ticker name
+        sort_condition = sort_condition_temp.capitalize()
+    else:
+        print("Sort condition not recognized, defaulting to losers")
+
+    driver.get(f"https://int1.msn.com/en-us/money/markets?tab=Top{sort_condition}")  # Capital L Loser
+
+    time.sleep(3)
+
+    stocktest = driver.find_element(By.CLASS_NAME, "secTitle-DS-EntryPoint1-3")
+
+    while stocktest.text[0:5] == "Price":
+        stocktest = driver.find_element(By.CLASS_NAME, "secTitle-DS-EntryPoint1-3")
+
+    ticker_list = []
+
+    for element in driver.find_elements(By.CLASS_NAME, "secTitle-DS-EntryPoint1-3"):
+        ticker_list.append(element.text)
+
+    return ticker_list
+
+
+def main():
+
+    print(scrape_msn_money_simple())
+
+    setting = input("Would you like to scrape yahoo finance(1) or MSN money(2) or MSN money simple(3)?")
+    if setting == "1":
+        scrape_yahoo_fin_stocks()
+    elif setting == "2":
+        scrape_msn_money_stocks()
+    elif setting == "3":
+        print(scrape_msn_money_simple())
+    else:
+        print("Invalid input")
+
+
 if __name__ == "__main__":
-    scrape_msn_money()
+    main()
