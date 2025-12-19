@@ -13,7 +13,7 @@ import csv
 import time
 
 
-def scrape_msn_money():
+def scrape_yahoo_fin_stocks():
     base_url = "https://finance.yahoo.com/markets/stocks"
     sort_condition = "losers"
 
