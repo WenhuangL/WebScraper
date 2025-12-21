@@ -14,8 +14,7 @@ import time
 
 
 def scrape_yahoo_fin_stocks():
-    base_url = "https://finance.yahoo.com/markets/stocks"
-    sort_condition = "losers"
+    sort_condition = input("What would you like to sort by?")
 
     cats = [
         "Ticker", "Sector",
@@ -25,9 +24,10 @@ def scrape_yahoo_fin_stocks():
     ]
 
     headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                  "AppleWebKit/537.36 (KHTML, like Gecko) "
-                  "Chrome/114.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+        "Referer": "https://finance.yahoo.com/",
+        "Origin": "https://finance.yahoo.com"
     }
 
 
@@ -35,89 +35,92 @@ def scrape_yahoo_fin_stocks():
     # List to store the scraped data
     data = []
 
+    def yahoo_api_request(url, params):
+        r = requests.get(url, headers=headers, params=params)
+        if r.status_code != 200:
+            return None
+        return r.json()
 
-    def scrape_stock_details(stock_url):
-        response = requests.get(stock_url, headers=headers)
+    # Helper to calculate % change
+    def calc_pct_change(current, old):
+        if old == 0: return "N/A"
+        change = ((current - old) / old) * 100
+        return f"{change:.2f}%"
 
-        soup = BeautifulSoup(response.text, "html.parser")
+    def scrape_stock_details(symbol):
+        try:
+            ticker = yf.Ticker(symbol)
 
-        #print(soup.prettify()[:1000])
+            info = ticker.info
+            sector = info.get("sector", "N/A")
 
-        stock_name = soup.find("h1", class_="yf-4vbjci")
-        stock_name = stock_name.text.strip() if stock_name else "N/A"
+            # Returns a Pandas DataFrame
+            hist = ticker.history(period="max")
 
-        #sector = soup.find_all("a", class_="subtle-link fin-size-medium ellipsis yf-1i440lo")
-        sector = soup.find("span", class_="titleInfo yf-1d08kze")
-        sector = sector.text.strip() if sector else "N/A"
-        #print(sector)
+            if hist.empty:
+                return None
 
-        #industry = sector[1].text.strip()
-        #sector = sector[0].text.strip() if sector else "N/A"
+            # Get latest closing price
+            current_price = hist["Close"].iloc[-1]
+            current_price_fmt = f"{current_price:.2f}"
 
-        price = soup.find_all("span", class_="yf-ipw1h0 base")
-        price = price[0].text.strip() if price else "N/A"
+            # 1 week = 5 days, 1 mo = 21 days, 6 mo = 126 days, 1 yr = 252 days
+            total_rows = len(hist)
 
-        # Gets the percent change in price over different periods
-        if sort_condition == "losers":
-            #odc = soup.find_all("span", class_="txt-negative yf-ipw1h0 base")
-            odc = soup.find_all("span", class_="txt-negative change yf-1c9i0iv")
-        elif sort_condition == "gainers":
-            odc = soup.find_all("span", class_="txt-positive yf-ipw1h0 base")
-        else:
-            print("unknown sort condition")
-            return 0
-        odc = odc[0].text.strip() if odc else "N/A"
-        #print(odc)
+            change_1d = calc_pct_change(current_price, hist["Close"].iloc[-2]) if total_rows >= 2 else "N/A"
 
-        details = soup.find_all("h3", class_="title yf-17ug8v2")
+            change_5d = calc_pct_change(current_price, hist["Close"].iloc[-6]) if total_rows >= 6 else "N/A"
 
-        fdc = details[0].text.strip() if len(details) > 0 else "N/A"
-        omc = details[1].text.strip() if len(details) > 1 else "N/A"
-        smc = details[2].text.strip() if len(details) > 2 else "N/A"
-        oyc = details[4].text.strip() if len(details) > 4 else "N/A"
-        fyc = details[5].text.strip() if len(details) > 5 else "N/A"
-        atc = details[6].text.strip() if len(details) > 6 else "N/A"
+            change_1m = calc_pct_change(current_price, hist["Close"].iloc[-22]) if total_rows >= 22 else "N/A"
 
-        return [
-            stock_name, sector, price, odc, fdc, omc,
-            smc, oyc, fyc, atc
-        ]
+            change_6m = calc_pct_change(current_price, hist["Close"].iloc[-127]) if total_rows >= 127 else "N/A"
 
-    # Loop through the top stocks based on the sort_condition
-    def scrape_stock_list(page_url):
-        response = requests.get(page_url, headers=headers)
-        soup = BeautifulSoup(response.text, "html.parser")
-        #print(soup.prettify()[:1000])
-        id_list = soup.find_all("a", class_="ticker medium [&_.symbol]:tw-text-md hover noPadding yf-90gdtp")
+            change_1y = calc_pct_change(current_price, hist["Close"].iloc[-253]) if total_rows >= 253 else "N/A"
 
+            change_5y = calc_pct_change(current_price, hist["Close"].iloc[-1261]) if total_rows >= 1261 else "N/A"
 
-        if not id_list:
-            print("No dataset links found")
-            return
+            change_all = calc_pct_change(current_price, hist["Close"].iloc[0])
 
-        # print(id_list)
+            return [
+                symbol, sector, current_price_fmt,
+                change_1d, change_5d, change_1m,
+                change_6m, change_1y, change_5y, change_all
+            ]
 
-        for dataset in id_list:
-            stock_link = f"https://finance.yahoo.com" + dataset["href"]
-            print(f"Scraping details for {dataset.text.strip()}...")
-            dataset_details = scrape_stock_details(stock_link)
-            if dataset_details[0] == "N/A":
-                continue
-            data.append(dataset_details)
-            time.sleep(1)
+        except Exception as e:
+            print(f"Error scraping {symbol}: {e}")
+            return None
 
+    screener_url = "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved"
+    params = {"count": 25, "scrIds": "day_gainers" if sort_condition == "gainers" else "day_losers"}
 
-    # Loop through the top stocks based on the sort_condition
-    page_url = f"https://finance.yahoo.com/markets/stocks/{sort_condition}"
-    print(page_url)
-    #print(f"Scraping page: {page_url}")
-    #initial_data_count = len(data)
-    scrape_stock_list(page_url)
+    print(f"Fetching {sort_condition} list...")
+    screener = yahoo_api_request(screener_url, params)
+
+    if not screener:
+        print("Screener failed.")
+        return
+
+    quotes = screener["finance"]["result"][0]["quotes"]
+
+    for q in quotes:
+        symbol = q["symbol"]
+        print(f"Processing {symbol}...")
+
+        details = scrape_stock_details(symbol)
+        if details:
+            data.append(details)
+
+        time.sleep(0.2)
 
     with open("yahoofin_data.csv", "w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file)
         writer.writerow(cats)
         writer.writerows(data)
+
+    print("Success! Data saved to 'yahoofin_data.csv'.")
+
+
 def scrape_msn_money_stocks():
     try:
         service = Service(ChromeDriverManager().install())
